@@ -1,10 +1,12 @@
-﻿import shutil
+﻿
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 from agentguard.models import ActionRequest, ActionType, Decision
 from agentguard.policy import evaluate_action
+
 
 MAX_READ_BYTES = 1_048_576
 COMMAND_TIMEOUT_SECONDS = 5
@@ -40,7 +42,9 @@ def execute_action(
     policy_result = evaluate_action(request, str(root))
     if policy_result.decision != Decision.ALLOW:
         return ExecutionResult(
-            False, "", f"Policy rejected execution: {policy_result.reason}"
+            False,
+            "",
+            f"Policy rejected execution: {policy_result.reason}",
         )
 
     if request.action_type == ActionType.READ_FILE:
@@ -68,18 +72,26 @@ def _read_file(target: str, root: Path) -> ExecutionResult:
         if resolved.stat().st_size > MAX_READ_BYTES:
             return ExecutionResult(False, "", "File exceeds the 1 MiB read limit")
 
-        content = resolved.read_bytes()
+        with resolved.open("rb") as file:
+            content = file.read(MAX_READ_BYTES + 1)
+
         if len(content) > MAX_READ_BYTES:
             return ExecutionResult(False, "", "File exceeds the 1 MiB read limit")
 
         return ExecutionResult(
-            True, content.decode("utf-8"), "File read successfully"
+            True,
+            content.decode("utf-8"),
+            "File read successfully",
         )
 
     except UnicodeDecodeError:
         return ExecutionResult(False, "", "File is not valid UTF-8")
     except (OSError, RuntimeError, TypeError, ValueError):
-        return ExecutionResult(False, "", "Read target is outside the workspace or invalid")
+        return ExecutionResult(
+            False,
+            "",
+            "Read target is outside the workspace or invalid",
+        )
 
 
 def _run_allowed_tool(
@@ -110,6 +122,8 @@ def _run_allowed_tool(
             cwd=str(root),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=COMMAND_TIMEOUT_SECONDS,
             check=False,
             shell=False,

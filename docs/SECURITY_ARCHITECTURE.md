@@ -35,3 +35,41 @@ The existing policy is a prototype and is not production-secure.
 
 Define typed action requests and structured policy decisions,
 then test the policy independently before implementing a restricted executor.
+
+
+## Restricted Executor
+
+AgentGuard includes a restricted executor that performs a narrow set of
+operations after policy evaluation.
+
+### Supported operations
+
+- Read UTF-8 files located inside the configured workspace.
+- Limit file reads to 1 MiB.
+- Run predefined Git operations:
+  - `git status --short`
+  - `git diff --no-ext-diff --`
+
+### Execution safeguards
+
+- Structured action requests are checked by the policy engine before execution.
+- File targets are resolved and checked against the workspace root.
+- File reads are bounded to 1 MiB plus one byte, allowing oversized content
+  to be rejected without reading the entire file.
+- Git operations use predefined argument lists and `shell=False`.
+- Git execution has a five-second timeout.
+- Subprocess output is decoded as UTF-8, replacing invalid byte sequences.
+- Unsupported tools and write operations are rejected.
+
+### Limitations
+
+This executor is a prototype, not a security sandbox.
+
+Path resolution and subsequent file access are separate operations, so
+filesystem changes between those operations may create race conditions.
+The executor also does not provide operating-system-level isolation,
+resource quotas, or a general defense against malicious processes.
+
+Captured Git output is not currently bounded, so a command that produces
+very large output could consume significant memory. A production version
+would need stronger resource controls and OS-level isolation.
