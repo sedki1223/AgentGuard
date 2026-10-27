@@ -107,6 +107,12 @@ def evaluate_action(
         )
 
     if request.action_type == ActionType.RUN_TOOL:
+        if not isinstance(request.tool_name, str):
+            return PolicyDecision(
+                Decision.REQUIRE_APPROVAL,
+                "Tool name must be a string",
+            )
+
         expected_target = ALLOWED_TOOLS.get(request.tool_name)
 
         if expected_target is None:

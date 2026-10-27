@@ -1,4 +1,5 @@
-﻿import unittest
+
+import unittest
 from dataclasses import FrozenInstanceError
 
 from agentguard.models import (
@@ -42,6 +43,45 @@ class ModelTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             request.target = "other.txt"
 
+    def test_non_string_tool_name_requires_approval(self):
+        from agentguard.policy import evaluate_action
+
+        with self.subTest(tool_name=123):
+            request = ActionRequest(
+                ActionType.RUN_TOOL,
+                "git status",
+                tool_name=123,
+            )
+
+            result = evaluate_action(request, ".")
+
+            self.assertEqual(result.decision, Decision.REQUIRE_APPROVAL)
+
+    def test_unknown_tool_name_requires_approval(self):
+        from agentguard.policy import evaluate_action
+
+        request = ActionRequest(
+            ActionType.RUN_TOOL,
+            "git status",
+            tool_name="git_status_extra",
+        )
+
+        result = evaluate_action(request, ".")
+
+        self.assertEqual(result.decision, Decision.REQUIRE_APPROVAL)
+
+    def test_unhashable_tool_name_requires_approval(self):
+        from agentguard.policy import evaluate_action
+
+        request = ActionRequest(
+            ActionType.RUN_TOOL,
+            "git status",
+            tool_name=["git_status"],
+        )
+
+        result = evaluate_action(request, ".")
+
+        self.assertEqual(result.decision, Decision.REQUIRE_APPROVAL)
 
 if __name__ == "__main__":
     unittest.main()
