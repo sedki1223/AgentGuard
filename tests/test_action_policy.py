@@ -1,4 +1,4 @@
-﻿import tempfile
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -78,6 +78,32 @@ class ActionPolicyTests(unittest.TestCase):
         )
         self.assertEqual(result.decision, Decision.REQUIRE_APPROVAL)
 
+    def test_invalid_request_object_is_blocked(self):
+        result = evaluate_action(
+            "not an action request",
+            workspace_root=str(self.workspace),
+        )
+
+        self.assertEqual(result.decision, Decision.BLOCK)
+        self.assertEqual(result.reason, "Invalid action request")
+
+    def test_empty_target_is_blocked(self):
+        result = evaluate_action(
+            ActionRequest(ActionType.READ_FILE, "   "),
+            workspace_root=str(self.workspace),
+        )
+
+        self.assertEqual(result.decision, Decision.BLOCK)
+        self.assertEqual(result.reason, "Target must be a non-empty string")
+
+    def test_invalid_action_type_is_blocked(self):
+        result = evaluate_action(
+            ActionRequest("read_file", "README.md"),
+            workspace_root=str(self.workspace),
+        )
+
+        self.assertEqual(result.decision, Decision.BLOCK)
+        self.assertEqual(result.reason, "Unknown action type")
 
 if __name__ == "__main__":
     unittest.main()
