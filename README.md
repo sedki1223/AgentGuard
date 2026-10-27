@@ -1,45 +1,34 @@
-﻿# AgentGuard
+# AgentGuard
 
 **A prototype policy layer for AI coding-agent actions.**
 
-AgentGuard evaluates proposed actions and returns a structured decision:
-`ALLOW`, `BLOCK`, or `REQUIRE_APPROVAL`. It is designed to explore how an
-AI coding agent's requests can be checked before a separate executor performs
-any operation.
+AgentGuard evaluates proposed actions and returns one of three decisions: `ALLOW`, `BLOCK`, or `REQUIRE_APPROVAL`.
 
-> **Security status:** This is an educational prototype, not a production
-> security boundary. AgentGuard does not execute actions, and a policy
-> decision alone cannot guarantee that an operation is safe.
+It evaluates policy only. It does not execute commands or perform file operations.
 
-## Why AgentGuard?
-
-AI coding agents can propose actions that read files, modify a workspace,
-or invoke tools. Those requests should not automatically be trusted.
-
-AgentGuard explores a policy-first design with:
+## Features
 
 - Typed action requests and structured policy decisions.
-- Explicit decisions with human-readable reasons.
 - Workspace-boundary checks for existing files requested for reading.
-- An allowlist for a small set of predefined tool operations.
-- Conservative handling of writes and unrecognized tool requests.
-- Automated tests for policy behavior and selected edge cases.
+- Approval requirements for file writes.
+- An allowlist for predefined tool operations.
+- Conservative command classification.
+- A JSON interface for machine-readable policy evaluation.
+- Automated tests for policy behavior and invalid inputs.
 
-## Current capabilities
+## Current policy behavior
 
-| Action | Current behavior |
-| --- | --- |
-| Read an existing file inside the workspace | `ALLOW`, if the resolved path passes the policy checks |
-| Read a missing file, directory, or path outside the workspace | `BLOCK` |
-| Write a file | `REQUIRE_APPROVAL` |
-| Invoke a predefined tool with a matching target | `ALLOW`, subject to the policy's checks |
-| Invoke an unknown tool or mismatched target | `REQUIRE_APPROVAL` |
-| Classify a known dangerous command | `BLOCK` |
-| Classify a command outside the explicit allowlist | Usually `REQUIRE_APPROVAL`; known dangerous commands are blocked |
+| Action                                              | Decision                   |
+| --------------------------------------------------- | -------------------------- |
+| Read an existing file inside the workspace          | `ALLOW`                    |
+| Read a missing file or a path outside the workspace | `BLOCK`                    |
+| Write a file                                        | `REQUIRE_APPROVAL`         |
+| Invoke an allowlisted tool with its expected target | `ALLOW`                    |
+| Invoke an unknown tool or use a mismatched target   | `REQUIRE_APPROVAL`         |
+| Classify a known dangerous command                  | `BLOCK`                    |
+| Classify an unrecognized command                    | Usually `REQUIRE_APPROVAL` |
 
-These are policy classifications, not execution guarantees. In particular,
-the command classifier is a lightweight string-based prototype, not a
-complete shell parser.
+These decisions are classifications, not execution guarantees. The command classifier is a lightweight prototype, not a complete shell parser.
 
 ## Project structure
 
@@ -50,10 +39,12 @@ AgentGuard/
 ├── src/
 │   └── agentguard/
 │       ├── __init__.py
+│       ├── json_interface.py
 │       ├── models.py
 │       └── policy.py
 └── tests/
     ├── test_action_policy.py
+    ├── test_json_interface.py
     ├── test_models.py
     └── test_policy.py
 ```
@@ -63,12 +54,11 @@ AgentGuard/
 - Python 3.10 or newer
 - Git
 
-The project currently uses Python's standard library for its implementation
-and tests.
+The project uses Python's standard library and requires no third-party packages.
 
-## Set up locally
+## Setup
 
-Clone the repository and enter its directory:
+Clone the repository:
 
 ```powershell
 git clone https://github.com/sedki1223/AgentGuard.git
@@ -82,20 +72,51 @@ py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-No third-party packages are currently required to run the test suite.
+Set the source directory:
 
-## Run the tests
+```powershell
+$env:PYTHONPATH = "src"
+```
+
+## Run tests
 
 ```powershell
 python -m unittest discover -s tests -v
 ```
 
-The test suite covers model validation, workspace path checks, tool-policy
-decisions, and command-classification behavior.
+## JSON interface
 
-## Example
+The JSON interface reads one JSON request from standard input and prints a structured policy decision. It does not execute the requested action.
 
-Evaluate a proposed action without executing it:
+Example:
+
+```powershell
+$env:PYTHONPATH = "src"
+@'
+{"action_type":"read_file","target":"README.md"}
+'@ | python -m agentguard.json_interface
+```
+
+Example response:
+
+```json
+{
+  "decision": "allow",
+  "reason": "Existing file resolves inside the workspace; executor checks are still required"
+}
+```
+
+Supported action types:
+
+- `read_file` — checks whether an existing file resolves inside the workspace.
+- `write_file` — requires approval.
+- `run_tool` — checks a predefined tool name and its expected target.
+
+Malformed JSON, unsupported fields, and invalid requests return a `block` decision with a reason.
+
+The interface uses the current working directory as its workspace root. Run it from the intended workspace.
+
+## Python API
 
 ```python
 from pathlib import Path
@@ -103,63 +124,42 @@ from pathlib import Path
 from agentguard.models import ActionRequest, ActionType
 from agentguard.policy import evaluate_action
 
-workspace = Path.cwd()
-
 request = ActionRequest(
     action_type=ActionType.READ_FILE,
     target="README.md",
 )
 
-result = evaluate_action(
-    request,
-    workspace_root=str(workspace),
-)
+result = evaluate_action(request, workspace_root=str(Path.cwd()))
 
 print(result.decision.value)
 print(result.reason)
 ```
 
-For this example, `README.md` must exist in the current workspace. The result
-describes the policy's decision; it does not read or execute the requested
-operation on behalf of an agent.
+The example assumes `README.md` exists in the current workspace. The policy engine evaluates the request but does not read the file.
 
-To run the example from the repository root before installing the package,
-set the source directory on `PYTHONPATH` in PowerShell:
+## Security limitations
 
-```powershell
-$env:PYTHONPATH = "src"
-python -c "from pathlib import Path; from agentguard.models import ActionRequest, ActionType; from agentguard.policy import evaluate_action; r = evaluate_action(ActionRequest(ActionType.READ_FILE, 'README.md'), str(Path.cwd())); print(r.decision.value); print(r.reason)"
-```
-
-## Security boundaries and limitations
-
-AgentGuard is not production-secure and should not be used as the sole
-protection for untrusted code or AI-generated actions.
+AgentGuard is an educational prototype, not a production security boundary.
 
 - It does not execute commands or file operations.
-- The command classifier does not fully parse shell syntax or cover every
-  platform, interpreter, alias, or command equivalent.
-- A resolved-path check does not by itself prevent time-of-check/time-of-use
-  races or all filesystem attacks.
-- A future executor must independently validate arguments and enforce
-  operating-system permissions and workspace restrictions.
-- Approval workflows, execution isolation, and audit logging of real
-  execution outcomes are not implemented as a complete end-to-end system.
+- Its command classifier does not fully parse shell syntax or detect every dangerous command equivalent.
+- Path resolution alone does not prevent all filesystem attacks or time-of-check/time-of-use races.
+- Any future executor must independently validate arguments and enforce operating-system permissions and workspace restrictions.
+- Approval workflows, execution isolation, and complete audit logging are not implemented.
+- An `ALLOW` decision is not proof that an operation is safe.
 
-See [docs/SECURITY_ARCHITECTURE.md](docs/SECURITY_ARCHITECTURE.md) for the
-design principles and trust boundaries.
+See [docs/SECURITY_ARCHITECTURE.md](docs/SECURITY_ARCHITECTURE.md) for the design principles and trust boundaries.
 
 ## Roadmap
 
 - [x] Typed action requests and structured policy decisions
-- [x] Initial workspace and tool-policy checks
+- [x] Workspace and tool-policy checks
 - [x] Automated tests for core policy behavior
-- [ ] Add a user-facing policy evaluation interface
-- [ ] Define a restricted executor with independent validation
+- [x] JSON policy evaluation interface
+- [ ] Build a restricted executor with independent validation
 - [ ] Add execution audit records and end-to-end tests
 - [ ] Strengthen platform-specific security testing
 
 ## License
 
-No license has been added yet. Until one is chosen and committed, reuse and
-redistribution permissions should not be assumed.
+No license has been added yet. Until one is chosen and committed, reuse and redistribution permissions should not be assumed.
