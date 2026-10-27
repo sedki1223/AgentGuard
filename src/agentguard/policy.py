@@ -37,6 +37,21 @@ def evaluate_command(command: str) -> Decision:
 
     normalized = command.strip().lower()
 
+    # Any shell syntax needs review. Before returning that result,
+    # also check simple command segments for known dangerous commands.
+    segments = re.split(r"[;&|]+", normalized)
+
+    for segment in segments:
+        segment = segment.strip()
+
+        if not segment:
+            continue
+
+        first_token = segment.split(maxsplit=1)[0]
+
+        if first_token in DANGEROUS_COMMANDS:
+            return Decision.BLOCK
+
     if SHELL_SYNTAX.search(normalized):
         return Decision.REQUIRE_APPROVAL
 
