@@ -1,11 +1,7 @@
 ﻿import re
-from enum import Enum
+from pathlib import Path
 
-
-class Decision(str, Enum):
-    ALLOW = "allow"
-    BLOCK = "block"
-    REQUIRE_APPROVAL = "require_approval"
+from agentguard.models import ActionRequest, ActionType, Decision, PolicyDecision
 
 
 DANGEROUS_COMMANDS = {
@@ -23,6 +19,11 @@ ALLOWED_COMMANDS = {
     "git diff",
     "python --version",
     "py --version",
+}
+
+ALLOWED_TOOLS = {
+    "git_status",
+    "git_diff",
 }
 
 SHELL_SYNTAX = re.compile(r"[;&|<>`$()]")
@@ -47,3 +48,73 @@ def evaluate_command(command: str) -> Decision:
         return Decision.ALLOW
 
     return Decision.REQUIRE_APPROVAL
+
+
+def evaluate_action(
+    request: ActionRequest,
+    workspace_root: str,
+) -> PolicyDecision:
+    """Evaluate a structured action without performing it."""
+    if not isinstance(request, ActionRequest):
+        return PolicyDecision(Decision.BLOCK, "Invalid action request")
+
+    if not isinstance(request.action_type, ActionType):
+        return PolicyDecision(Decision.BLOCK, "Unknown action type")
+
+    if not isinstance(request.target, str) or not request.target.strip():
+        return PolicyDecision(Decision.BLOCK, "Target must be a non-empty string")
+
+    try:
+        root = Path(workspace_root).resolve(strict=True)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return PolicyDecision(Decision.BLOCK, "Workspace root is invalid")
+
+    if not root.is_dir():
+        return PolicyDecision(Decision.BLOCK, "Workspace root is not a directory")
+
+    if request.action_type == ActionType.READ_FILE:
+        try:
+            target = Path(request.target)
+
+            if not target.is_absolute():
+                target = root / target
+
+            resolved_target = target.resolve(strict=True)
+            resolved_target.relative_to(root)
+
+            if not resolved_target.is_file():
+                return PolicyDecision(
+                    Decision.BLOCK,
+                    "Read target is not an existing regular file",
+                )
+
+        except (OSError, RuntimeError, TypeError, ValueError):
+            return PolicyDecision(
+                Decision.BLOCK,
+                "Read target is outside the workspace or invalid",
+            )
+
+        return PolicyDecision(
+            Decision.ALLOW,
+            "Existing file resolves inside the workspace; executor checks are still required",
+        )
+
+    if request.action_type == ActionType.WRITE_FILE:
+        return PolicyDecision(
+            Decision.REQUIRE_APPROVAL,
+            "File writes require explicit approval in this prototype",
+        )
+
+    if request.action_type == ActionType.RUN_TOOL:
+        if request.tool_name in ALLOWED_TOOLS:
+            return PolicyDecision(
+                Decision.ALLOW,
+                "Tool is on the predefined allowlist; executor validation is still required",
+            )
+
+        return PolicyDecision(
+            Decision.REQUIRE_APPROVAL,
+            "Tool is not on the predefined allowlist",
+        )
+
+    return PolicyDecision(Decision.BLOCK, "Unsupported action type")
