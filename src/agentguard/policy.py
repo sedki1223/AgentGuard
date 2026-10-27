@@ -1,4 +1,5 @@
-﻿import re
+﻿
+import re
 from pathlib import Path
 
 from agentguard.models import ActionRequest, ActionType, Decision, PolicyDecision
@@ -22,8 +23,8 @@ ALLOWED_COMMANDS = {
 }
 
 ALLOWED_TOOLS = {
-    "git_status",
-    "git_diff",
+    "git_status": "git status",
+    "git_diff": "git diff",
 }
 
 SHELL_SYNTAX = re.compile(r"[;&|<>`$()]")
@@ -31,7 +32,7 @@ SHELL_SYNTAX = re.compile(r"[;&|<>`$()]")
 
 def evaluate_command(command: str) -> Decision:
     """Classify a command without executing it."""
-    if not command or not command.strip():
+    if not isinstance(command, str) or not command.strip():
         return Decision.BLOCK
 
     normalized = command.strip().lower()
@@ -106,15 +107,23 @@ def evaluate_action(
         )
 
     if request.action_type == ActionType.RUN_TOOL:
-        if request.tool_name in ALLOWED_TOOLS:
+        expected_target = ALLOWED_TOOLS.get(request.tool_name)
+
+        if expected_target is None:
             return PolicyDecision(
-                Decision.ALLOW,
-                "Tool is on the predefined allowlist; executor validation is still required",
+                Decision.REQUIRE_APPROVAL,
+                "Tool is not on the predefined allowlist",
+            )
+
+        if request.target.strip().lower() != expected_target:
+            return PolicyDecision(
+                Decision.REQUIRE_APPROVAL,
+                "Target does not match the predefined tool operation",
             )
 
         return PolicyDecision(
-            Decision.REQUIRE_APPROVAL,
-            "Tool is not on the predefined allowlist",
+            Decision.ALLOW,
+            "Tool and target match the predefined operation; executor validation is still required",
         )
 
     return PolicyDecision(Decision.BLOCK, "Unsupported action type")

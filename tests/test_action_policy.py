@@ -105,5 +105,29 @@ class ActionPolicyTests(unittest.TestCase):
         self.assertEqual(result.decision, Decision.BLOCK)
         self.assertEqual(result.reason, "Unknown action type")
 
+    def test_allowed_tool_with_mismatched_target_requires_approval(self):
+        result = evaluate_action(
+            ActionRequest(
+                ActionType.RUN_TOOL,
+                "shutdown /s",
+                tool_name="git_status",
+            ),
+            workspace_root=str(self.workspace),
+        )
+
+        self.assertEqual(result.decision, Decision.REQUIRE_APPROVAL)
+
+    def test_allowed_tool_with_empty_target_requires_approval(self):
+        result = evaluate_action(
+            ActionRequest(
+                ActionType.RUN_TOOL,
+                "   ",
+                tool_name="git_status",
+            ),
+            workspace_root=str(self.workspace),
+        )
+
+        self.assertEqual(result.decision, Decision.BLOCK)
+
 if __name__ == "__main__":
     unittest.main()
