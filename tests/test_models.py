@@ -1,4 +1,3 @@
-
 import unittest
 from dataclasses import FrozenInstanceError
 
@@ -43,45 +42,54 @@ class ModelTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             request.target = "other.txt"
 
-    def test_non_string_tool_name_requires_approval(self):
-        from agentguard.policy import evaluate_action
+    def test_invalid_action_type_raises_type_error(self):
+        with self.assertRaises(TypeError):
+            ActionRequest("read_file", "README.md")
 
-        with self.subTest(tool_name=123):
-            request = ActionRequest(
+    def test_non_string_target_raises_type_error(self):
+        with self.assertRaises(TypeError):
+            ActionRequest(ActionType.READ_FILE, None)
+
+    def test_empty_target_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            ActionRequest(ActionType.READ_FILE, "   ")
+
+    def test_non_string_tool_name_raises_type_error(self):
+        with self.assertRaises(TypeError):
+            ActionRequest(
                 ActionType.RUN_TOOL,
                 "git status",
                 tool_name=123,
             )
 
-            result = evaluate_action(request, ".")
+    def test_unhashable_tool_name_raises_type_error(self):
+        with self.assertRaises(TypeError):
+            ActionRequest(
+                ActionType.RUN_TOOL,
+                "git status",
+                tool_name=["git_status"],
+            )
 
-            self.assertEqual(result.decision, Decision.REQUIRE_APPROVAL)
+    def test_empty_tool_name_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            ActionRequest(
+                ActionType.RUN_TOOL,
+                "git status",
+                tool_name="   ",
+            )
 
-    def test_unknown_tool_name_requires_approval(self):
-        from agentguard.policy import evaluate_action
+    def test_invalid_decision_raises_type_error(self):
+        with self.assertRaises(TypeError):
+            PolicyDecision("allow", "Allowed")
 
-        request = ActionRequest(
-            ActionType.RUN_TOOL,
-            "git status",
-            tool_name="git_status_extra",
-        )
+    def test_non_string_reason_raises_type_error(self):
+        with self.assertRaises(TypeError):
+            PolicyDecision(Decision.ALLOW, None)
 
-        result = evaluate_action(request, ".")
+    def test_empty_reason_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            PolicyDecision(Decision.ALLOW, "   ")
 
-        self.assertEqual(result.decision, Decision.REQUIRE_APPROVAL)
-
-    def test_unhashable_tool_name_requires_approval(self):
-        from agentguard.policy import evaluate_action
-
-        request = ActionRequest(
-            ActionType.RUN_TOOL,
-            "git status",
-            tool_name=["git_status"],
-        )
-
-        result = evaluate_action(request, ".")
-
-        self.assertEqual(result.decision, Decision.REQUIRE_APPROVAL)
 
 if __name__ == "__main__":
     unittest.main()

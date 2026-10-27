@@ -10,7 +10,10 @@ class ActionPolicyTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.workspace = Path(self.temp_dir.name)
-        (self.workspace / "README.md").write_text("AgentGuard", encoding="utf-8")
+        (self.workspace / "README.md").write_text(
+            "AgentGuard",
+            encoding="utf-8",
+        )
 
     def tearDown(self):
         self.temp_dir.cleanup()
@@ -87,24 +90,6 @@ class ActionPolicyTests(unittest.TestCase):
         self.assertEqual(result.decision, Decision.BLOCK)
         self.assertEqual(result.reason, "Invalid action request")
 
-    def test_empty_target_is_blocked(self):
-        result = evaluate_action(
-            ActionRequest(ActionType.READ_FILE, "   "),
-            workspace_root=str(self.workspace),
-        )
-
-        self.assertEqual(result.decision, Decision.BLOCK)
-        self.assertEqual(result.reason, "Target must be a non-empty string")
-
-    def test_invalid_action_type_is_blocked(self):
-        result = evaluate_action(
-            ActionRequest("read_file", "README.md"),
-            workspace_root=str(self.workspace),
-        )
-
-        self.assertEqual(result.decision, Decision.BLOCK)
-        self.assertEqual(result.reason, "Unknown action type")
-
     def test_allowed_tool_with_mismatched_target_requires_approval(self):
         result = evaluate_action(
             ActionRequest(
@@ -117,17 +102,18 @@ class ActionPolicyTests(unittest.TestCase):
 
         self.assertEqual(result.decision, Decision.REQUIRE_APPROVAL)
 
-    def test_allowed_tool_with_empty_target_requires_approval(self):
+    def test_unknown_tool_target_requires_approval(self):
         result = evaluate_action(
             ActionRequest(
                 ActionType.RUN_TOOL,
-                "   ",
-                tool_name="git_status",
+                "inspect repository",
+                tool_name="unknown_tool",
             ),
             workspace_root=str(self.workspace),
         )
 
-        self.assertEqual(result.decision, Decision.BLOCK)
+        self.assertEqual(result.decision, Decision.REQUIRE_APPROVAL)
+
 
 if __name__ == "__main__":
     unittest.main()

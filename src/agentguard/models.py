@@ -1,4 +1,4 @@
-﻿from dataclasses import dataclass
+from dataclasses import dataclass
 from enum import Enum
 
 
@@ -20,8 +20,35 @@ class ActionRequest:
     target: str
     tool_name: str | None = None
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.action_type, ActionType):
+            raise TypeError("action_type must be an ActionType")
+
+        if not isinstance(self.target, str):
+            raise TypeError("target must be a string")
+
+        if not self.target.strip():
+            raise ValueError("target must not be empty")
+
+        if self.tool_name is not None:
+            if not isinstance(self.tool_name, str):
+                raise TypeError("tool_name must be a string or None")
+
+            if not self.tool_name.strip():
+                raise ValueError("tool_name must not be empty")
+
 
 @dataclass(frozen=True)
 class PolicyDecision:
     decision: Decision
     reason: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.decision, Decision):
+            raise TypeError("decision must be a Decision")
+
+        if not isinstance(self.reason, str):
+            raise TypeError("reason must be a string")
+
+        if not self.reason.strip():
+            raise ValueError("reason must not be empty")
